@@ -117,7 +117,7 @@ module ActsAsTaggableOn::Taggable
                       " AND #{ActsAsTaggableOn::Tagging.table_name}.taggable_type = #{quote_value(base_class.name, nil)}" +
                       " AND #{ActsAsTaggableOn::Tagging.table_name}.tagger_id = #{quote_value(owned_by.id, nil)}" +
                       " AND #{ActsAsTaggableOn::Tagging.table_name}.tagger_type = #{quote_value(owned_by.class.base_class.to_s, nil)}"
-            
+
             joins << " AND " + sanitize_sql(["#{ActsAsTaggableOn::Tagging.table_name}.created_at >= ?", options.delete(:start_at)]) if options[:start_at]
             joins << " AND " + sanitize_sql(["#{ActsAsTaggableOn::Tagging.table_name}.created_at <= ?", options.delete(:end_at)])   if options[:end_at]
           end
@@ -208,7 +208,7 @@ module ActsAsTaggableOn::Taggable
           taggings_alias, _ = adjust_taggings_alias("#{alias_base_name}_taggings_group"), "#{alias_base_name}_tags_group"
           joins << "LEFT OUTER JOIN #{ActsAsTaggableOn::Tagging.table_name} #{taggings_alias}" \
               "  ON #{taggings_alias}.taggable_id = #{quote}#{table_name}#{quote}.#{primary_key}" \
-              " AND #{taggings_alias}.taggable_type = #{quote_value(base_class.name, nil)}"
+              " AND #{taggings_alias}.taggable_type = #{self.connection.quote(base_class.name)}"
 
           joins << " AND " + sanitize_sql(["#{taggings_alias}.context = ?", context.to_s]) if context
           joins << " AND " + sanitize_sql(["#{ActsAsTaggableOn::Tagging.table_name}.created_at >= ?", options.delete(:start_at)]) if options[:start_at]
@@ -221,14 +221,13 @@ module ActsAsTaggableOn::Taggable
 
         order_by << options[:order] if options[:order].present?
 
-        query = self
-        query = self.select(select_clause.join(',')) unless select_clause.empty?
-        query.joins(joins.join(' '))
-        .where(conditions.join(' AND '))
-        .group(group)
-        .having(having)
-        .order(order_by.join(', '))
-        .readonly(false)
+        query = select(select_clause) \
+          .joins(joins.join(" ")) \
+          .where(conditions.join(" AND ")) \
+          .group(group) \
+          .order(options[:order]) \
+          .readonly(false)
+        having.blank? ? query : query.having(having) # https://github.com/mbleigh/acts-as-taggable-on/pull/388
       end
 
       def is_taggable?
